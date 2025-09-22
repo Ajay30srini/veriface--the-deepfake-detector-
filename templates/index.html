@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veriface - The Deepfake Detector</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="stars"></div>
+  <div class="container">
+    <header class="header">
+      <h1><i class="fas fa-search"></i> Veriface - The Deepfake Detector</h1>
+      <p class="subtitle">Uncover the truth behind images with AI-powered detection</p>
+    </header>
+
+    <form id="upload-form" class="upload-form">
+      <div class="file-input-wrapper">
+        <input type="file" id="image-input" accept="image/*" required>
+        <label for="image-input" class="file-label">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <span>Choose an Image</span>
+          <p>Supports JPG, PNG, GIF</p>
+        </label>
+      </div>
+      <button type="submit" class="upload-btn">
+        <i class="fas fa-magic"></i> Detect Deepfake
+      </button>
+    </form>
+
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <p>Analyzing image... Please wait</p>
+    </div>
+
+    <div id="result" class="result hidden">
+      <h2><i class="fas fa-chart-bar"></i> Detection Result</h2>
+      <div class="confidence-display">
+        <div class="confidence-item real">
+          <i class="fas fa-check-circle"></i>
+          <span>Real Confidence</span>
+          <div class="confidence-value" id="real-value">0%</div>
+        </div>
+        <div class="confidence-item fake">
+          <i class="fas fa-exclamation-triangle"></i>
+          <span>Fake Confidence</span>
+          <div class="confidence-value" id="fake-value">0%</div>
+        </div>
+      </div>
+      <div class="progress-container">
+        <div class="progress-wrapper">
+          <label>Real</label>
+          <div class="progress-bar">
+            <div id="real-bar" class="bar real-bar"></div>
+          </div>
+        </div>
+        <div class="progress-wrapper">
+          <label>Fake</label>
+          <div class="progress-bar">
+            <div id="fake-bar" class="bar fake-bar"></div>
+          </div>
+        </div>
+      </div>
+      <div class="label-container">
+        <p id="label" class="label"></p>
+        <button id="analyze-again" class="analyze-again-btn hidden">
+          <i class="fas fa-redo"></i> Analyze Another Image
+        </button>
+      </div>
+    </div>
+
+    <!-- Contact Section - Placed here for footer integration -->
+    <section class="contact-section">
+      <h3>Contact & References</h3>
+      <p>For inquiries or references, please email me at:</p>
+      <a href="mailto:ajay30srini@gmail.com" class="email-link">
+        <i class="fas fa-envelope"></i> ajay30srini@gmail.com
+      </a>
+    </section>
+
+    <footer class="footer">
+      <p>Veriface - The Deepfake Detector </p>
+    </footer>
+  </div>
+
+  <script>
+    const form = document.getElementById("upload-form");
+    const fileInput = document.getElementById("image-input");
+    const loading = document.getElementById("loading");
+    const resultDiv = document.getElementById("result");
+    const realBar = document.getElementById("real-bar");
+    const fakeBar = document.getElementById("fake-bar");
+    const label = document.getElementById("label");
+    const analyzeAgainBtn = document.getElementById("analyze-again");
+    const realValue = document.getElementById("real-value");
+    const fakeValue = document.getElementById("fake-value");
+
+    // File input label update
+    fileInput.addEventListener("change", () => {
+      const fileName = fileInput.files[0]?.name || "Choose an Image";
+      const span = document.querySelector(".file-label span");
+      span.textContent = fileName;
+    });
+
+    // Analyze again button
+    analyzeAgainBtn.addEventListener("click", () => {
+      form.reset();
+      resultDiv.classList.add("hidden");
+      loading.classList.add("hidden");
+      analyzeAgainBtn.classList.add("hidden");
+      const span = document.querySelector(".file-label span");
+      span.textContent = "Choose an Image";
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!fileInput.files.length) return alert("Please select an image");
+
+      // Show loading
+      loading.classList.remove("hidden");
+      resultDiv.classList.add("hidden");
+      form.classList.add("disabled");
+
+      const formData = new FormData();
+      formData.append("image", fileInput.files[0]);
+
+      try {
+        const res = await fetch("/predict", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await res.json();
+
+        // Hide loading
+        loading.classList.add("hidden");
+        form.classList.remove("disabled");
+
+        if (data.error) {
+          label.innerHTML = `<i class="fas fa-exclamation-circle"></i> ❌ Error: ${data.error}`;
+          label.classList.add("error");
+        } else {
+          // Animate bars and values
+          realBar.style.width = data.real_probability + "%";
+          fakeBar.style.width = data.fake_probability + "%";
+          realValue.textContent = data.real_probability + "%";
+          fakeValue.textContent = data.fake_probability + "%";
+
+          if (data.real_probability > data.fake_probability) {
+            label.innerHTML = `<i class="fas fa-thumbs-up"></i> ✅ Likely Real`;
+            label.classList.add("real");
+            label.classList.remove("fake", "error");
+          } else {
+            label.innerHTML = `<i class="fas fa-thumbs-down"></i> ❌ Likely Fake`;
+            label.classList.add("fake");
+            label.classList.remove("real", "error");
+          }
+          analyzeAgainBtn.classList.remove("hidden");
+        }
+        resultDiv.classList.remove("hidden");
+      } catch (error) {
+        loading.classList.add("hidden");
+        form.classList.remove("disabled");
+        label.innerHTML = `<i class="fas fa-exclamation-circle"></i> ❌ Network Error: Please try again`;
+        label.classList.add("error");
+        resultDiv.classList.remove("hidden");
+      }
+    });
+
+    // Add sparkle effect on hover for upload button
+    const uploadBtn = document.querySelector(".upload-btn");
+    uploadBtn.addEventListener("mouseenter", () => {
+      uploadBtn.style.transform = "scale(1.05) rotate(2deg)";
+    });
+    uploadBtn.addEventListener("mouseleave", () => {
+      uploadBtn.style.transform = "scale(1) rotate(0deg)";
+    });
+  </script>
+</body>
+</html>
