@@ -1,61 +1,61 @@
 import os
-import io
 import numpy as np
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, render_template
+from tensorflow.keras.preprocessing import image
 from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import img_to_array
-from PIL import Image
+import gdown
 
-# Initialize Flask app
+# ------------------------------
+# Flask App
+# ------------------------------
 app = Flask(__name__)
 
-# Load the trained model
-MODEL_PATH = r"C:\Users\a\OneDrive\Desktop\new deepfake\model\deepfake_model.h5"
+# ------------------------------
+# Model Setup
+# ------------------------------
+# Use relative path so it works on Render (Linux) and locally
+MODEL_PATH = os.path.join("model", "deepfake_model.h5")
+
+# Download model from Google Drive if not present
+if not os.path.exists(MODEL_PATH):
+    os.makedirs("model", exist_ok=True)
+    url = "https://drive.google.com/uc?id=1ZEbB4xDMDmAfzWJG3WS5zlxucj6oohvK"
+    print("⬇️ Downloading model from Google Drive...")
+    gdown.download(url, MODEL_PATH, quiet=False)
+    print("✅ Model downloaded successfully!")
+
+# Load model
+print("🔄 Loading model...")
 model = load_model(MODEL_PATH)
+print("✅ Model loaded successfully!")
 
-# Image size expected by MobileNetV2
-IMG_SIZE = (224, 224)
+# ------------------------------
+# Routes
+# ------------------------------
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        # Handle uploaded file
+        file = request.files["file"]
+        filepath = os.path.join("uploads", file.filename)
+        os.makedirs("uploads", exist_ok=True)
+        file.save(filepath)
 
-def preprocess_image(image_bytes):
-    """Preprocess uploaded image for prediction."""
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image = image.resize(IMG_SIZE)
-    image_array = img_to_array(image) / 255.0   # normalize [0,1]
-    return np.expand_dims(image_array, axis=0)
+        # Preprocess image
+        img = image.load_img(filepath, target_size=(224, 224))
+        img_array = image.img_to_array(img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
 
-@app.route("/")
-def home():
+        # Prediction
+        prediction = model.predict(img_array)
+        result = "FAKE" if prediction[0][0] > 0.5 else "REAL"
+
+        return render_template("index.html", prediction=result)
+
     return render_template("index.html")
 
-@app.route("/predict", methods=["POST"])
-def predict():
-    try:
-        if "image" not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
-
-        file = request.files["image"]
-        if file.filename == "":
-            return jsonify({"error": "No file selected"}), 400
-
-        # Preprocess
-        image_bytes = file.read()
-        processed_image = preprocess_image(image_bytes)
-
-        # Predict
-        prediction = model.predict(processed_image)[0][0]
-
-        # Real vs Fake probabilities
-        fake_prob = float(prediction * 100)
-        real_prob = float((1 - prediction) * 100)
-
-        return jsonify({
-            "real_probability": round(real_prob, 2),
-            "fake_probability": round(fake_prob, 2)
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+# ------------------------------
+# Main
+# ------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
